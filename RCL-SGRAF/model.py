@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+from transformers import BertModel
 
 import torch.nn.functional as F
 
@@ -125,6 +126,18 @@ class EncoderText(nn.Module):
             cap_emb = l2norm(cap_emb, dim=-1)
 
         return cap_emb
+
+
+class EncoderTextBert(nn.Module):
+    def __init__(self, embed_size, bert_path, no_txtnorm=False):
+        super().__init__()
+        self.no_txtnorm = no_txtnorm
+        self.bert = BertModel.from_pretrained(str(bert_path), local_files_only=True)
+        self.linear = nn.Linear(self.bert.config.hidden_size, embed_size)
+
+    def forward(self, captions, lengths):
+        features = self.linear(self.bert(input_ids=captions, attention_mask=(captions != 0).long()).last_hidden_state)
+        return features if self.no_txtnorm else l2norm(features, dim=-1)
 
 
 class VisualSA(nn.Module):
@@ -502,10 +515,7 @@ class SGRAF(object):
         self.grad_clip = opt.grad_clip
         self.img_enc = EncoderImage(opt.img_dim, opt.embed_size,
                                     no_imgnorm=opt.no_imgnorm)
-        self.txt_enc = EncoderText(opt.vocab_size, opt.word_dim,
-                                   opt.embed_size, opt.num_layers, 
-                                   use_bi_gru=opt.bi_gru,  
-                                   no_txtnorm=opt.no_txtnorm)
+        self.txt_enc = EncoderTextBert(opt.embed_size, opt.bert_path, opt.no_txtnorm) if opt.text_enc_type == 'bert' else EncoderText(opt.vocab_size, opt.word_dim, opt.embed_size, opt.num_layers, use_bi_gru=opt.bi_gru, no_txtnorm=opt.no_txtnorm)
         self.sim_enc = EncoderSimilarity(opt.embed_size, opt.sim_dim,
                                          opt.module_name, opt.sgr_step)
 

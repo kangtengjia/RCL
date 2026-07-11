@@ -12,6 +12,7 @@ import time
 import shutil
 
 import torch
+from transformers import BertTokenizer
 import numpy
 
 import data
@@ -21,6 +22,8 @@ from model import SGRAF
 from evaluation import i2t, t2i, AverageMeter, LogCollector, encode_data, shard_attn_scores
 
 import logging
+from roma import is_roma_dataset
+from roma_evaluation import text_to_scene_metrics
 import tensorboard_logger as tb_logger
 
 #os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -32,9 +35,14 @@ def main():
     tb_logger.configure(opt.logger_name, flush_secs=5)
 
     # Load Vocabulary Wrapper
-    vocab = deserialize_vocab(os.path.join(opt.vocab_path, '%s_vocab.json' % opt.data_name))
-    vocab.add_word('<mask>')
-    opt.vocab_size = len(vocab)
+    if opt.text_enc_type == 'bert':
+        vocab = BertTokenizer.from_pretrained(opt.bert_path, local_files_only=True)
+        opt.vocab_size = len(vocab.vocab)
+    else:
+        vocab_file = 'nr3d_vocab.json' if opt.data_name == 'nr3d' else 'my_data_vocab.json'
+        vocab = deserialize_vocab(os.path.join(opt.vocab_path, vocab_file))
+        vocab.add_word('<mask>')
+        opt.vocab_size = len(vocab)
 
     # Load data loaders
     train_loader, val_loader = data.get_loaders(opt.data_name, vocab, opt.batch_size, opt.workers, opt)
@@ -133,6 +141,12 @@ def train(opt, train_loader, model, epoch, val_loader):
 def validate(opt, val_loader, model):
     # compute the encoding for all the validation images and captions
     img_embs, cap_embs, cap_lens = encode_data(model, val_loader, opt.log_step, logging.info)
+    if is_roma_dataset(opt.data_name):
+        scene_rows = [val_loader.dataset.scene_indices.index(scene) for scene in dict.fromkeys(val_loader.dataset.scene_indices)]
+        sims = shard_attn_scores(model, img_embs[scene_rows], cap_embs, cap_lens, opt, shard_size=100)
+        metrics = text_to_scene_metrics(sims, val_loader.dataset.scene_indices)
+        logging.info('Text to scene: %s', metrics)
+        return metrics['Rsum']
     img_div = 1 if 'cc152k' in opt.data_name else 5 #int(val_loader.dataset.im_div)
     # clear duplicate 5*images and keep 1*images
     img_embs = numpy.array([img_embs[i] for i in range(0, len(img_embs), img_div)])

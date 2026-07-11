@@ -11,6 +11,8 @@ import json
 import csv
 import random
 
+from roma import SceneUniqueBatchSampler, is_roma_dataset, load_roma_bundle
+
 class PrecompDataset(data.Dataset):
     """
     Load precomputed captions and image features
@@ -20,6 +22,15 @@ class PrecompDataset(data.Dataset):
     def __init__(self, data_path, data_split, vocab, opt):
         self.vocab = vocab
         loc = data_path + '/'
+        self.opt = opt
+        self.is_roma = is_roma_dataset(opt.data_name)
+        if self.is_roma:
+            bundle = load_roma_bundle(getattr(opt, 'data_root', '') or data_path, opt.data_name, data_split)
+            self.captions, self.images = bundle.captions, bundle.features
+            self.scene_indices, self.feature_scene_ids = bundle.scene_indices, bundle.feature_scene_ids
+            self.img_len, self.length, self.im_div = len(self.images), len(self.captions), 1
+            self.noisy_inx = np.arange(self.length)
+            return
         # load the raw captions
         self.captions = []
         if 'cc152k_precomp' in data_path:
@@ -68,20 +79,18 @@ class PrecompDataset(data.Dataset):
 
     def __getitem__(self, index):
         # handle the image redundancy
-        img_id = self.noisy_inx[int(index / self.im_div)]
+        img_id = self.scene_indices[index] if self.is_roma else self.noisy_inx[int(index / self.im_div)]
         image = torch.Tensor(self.images[img_id])
         caption = self.captions[index]
         vocab = self.vocab
 
         # convert caption (string) to word ids.
-        tokens = nltk.tokenize.word_tokenize(
-            # str(caption).lower().decode('utf-8'))
-            str(caption, 'utf-8').lower())
-        caption = []
-        caption.append(vocab('<start>'))
-        caption.extend([vocab(token) for token in tokens])
-        caption.append(vocab('<end>'))
-        target = torch.Tensor(caption)
+        if getattr(self.opt, 'text_enc_type', 'bigru') == 'bert':
+            target = torch.tensor(self.vocab.encode(str(caption), add_special_tokens=True))
+        else:
+            text = str(caption) if self.is_roma else str(caption, 'utf-8')
+            tokens = nltk.tokenize.word_tokenize(text.lower())
+            target = torch.Tensor([vocab('<start>'), *[vocab(token) for token in tokens], vocab('<end>')])
         return image, target, index, img_id
     
     def __len__(self):
@@ -120,12 +129,11 @@ def get_precomp_loader(data_path, data_split, vocab, opt, batch_size=100,
                        shuffle=True, num_workers=2):
     dset = PrecompDataset(data_path, data_split, vocab, opt)
 
-    data_loader = torch.utils.data.DataLoader(dataset=dset,
-                                              batch_size=batch_size,
-                                              shuffle=shuffle,
-                                              pin_memory=True,
-                                              collate_fn=collate_fn,
-                                              num_workers=num_workers)
+    sampler = SceneUniqueBatchSampler(dset.scene_indices, batch_size, seed=getattr(opt, 'seed', 2022)) if shuffle and dset.is_roma else None
+    if sampler is not None:
+        data_loader = torch.utils.data.DataLoader(dataset=dset, batch_sampler=sampler, pin_memory=True, collate_fn=collate_fn, num_workers=num_workers)
+    else:
+        data_loader = torch.utils.data.DataLoader(dataset=dset, batch_size=batch_size, shuffle=shuffle, pin_memory=True, collate_fn=collate_fn, num_workers=num_workers)
     return data_loader
 
 

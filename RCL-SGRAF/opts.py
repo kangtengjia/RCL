@@ -13,6 +13,9 @@ def parse_opt():
                         help='{coco,f30k}_precomp')
     parser.add_argument('--vocab_path', default='../data/vocab/',
                         help='Path to saved vocabulary json files.')
+    parser.add_argument('--data_root', default='', help='RoMa data directory.')
+    parser.add_argument('--text_enc_type', choices=['bigru', 'bert'], default='bigru')
+    parser.add_argument('--bert_path', default='', help='Local bert-base-uncased directory.')
     parser.add_argument('--model_name', default='./runs/f30k_SGR/checkpoint',
                         help='Path to save the model.')
     parser.add_argument('--logger_name', default='./runs/f30k_SGR/log',
