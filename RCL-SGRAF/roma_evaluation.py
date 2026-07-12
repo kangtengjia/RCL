@@ -25,4 +25,5 @@ def text_to_scene_metrics(similarities: np.ndarray, caption_scene_indices: Seque
     metrics["Rsum"] = sum(metrics[f"R@{cutoff}"] for cutoff in ks)
     metrics["MedR"] = float(statistics.median(ranks)) if ranks else 0.0
     metrics["MeanR"] = float(np.mean(ranks)) if ranks else 0.0
+    metrics["MRR"] = float(np.mean(1.0 / np.asarray(ranks)) * 100.0) if ranks else 0.0
     return metrics

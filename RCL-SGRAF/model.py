@@ -313,11 +313,11 @@ class EncoderSimilarity(nn.Module):
     Returns:
         - sim_all: final image-text similarities, shape: (batch_size, batch_size).
     """
-    def __init__(self, embed_size, sim_dim, module_name='AVE', sgr_step=3):
+    def __init__(self, embed_size, sim_dim, module_name='AVE', sgr_step=3, num_regions=36):
         super(EncoderSimilarity, self).__init__()
         self.module_name = module_name
 
-        self.v_global_w = VisualSA(embed_size, 0.4, 36)
+        self.v_global_w = VisualSA(embed_size, 0.4, num_regions)
         self.t_global_w = TextSA(embed_size, 0.4)
 
         self.sim_tranloc_w = nn.Linear(embed_size, sim_dim)
@@ -516,8 +516,13 @@ class SGRAF(object):
         self.img_enc = EncoderImage(opt.img_dim, opt.embed_size,
                                     no_imgnorm=opt.no_imgnorm)
         self.txt_enc = EncoderTextBert(opt.embed_size, opt.bert_path, opt.no_txtnorm) if opt.text_enc_type == 'bert' else EncoderText(opt.vocab_size, opt.word_dim, opt.embed_size, opt.num_layers, use_bi_gru=opt.bi_gru, no_txtnorm=opt.no_txtnorm)
-        self.sim_enc = EncoderSimilarity(opt.embed_size, opt.sim_dim,
-                                         opt.module_name, opt.sgr_step)
+        self.sim_enc = EncoderSimilarity(
+            opt.embed_size,
+            opt.sim_dim,
+            opt.module_name,
+            opt.sgr_step,
+            opt.num_regions,
+        )
 
         if torch.cuda.is_available():
             self.img_enc.cuda()

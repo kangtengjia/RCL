@@ -84,6 +84,32 @@ python evaluate_model.py --data_name f30k_precomp --module_name SAF --noise_rate
 python evaluate_model.py --data_name f30k_precomp --module_name SGRAF --noise_rate 0.2
 ```
 
+## RoMa text-to-3D retrieval
+
+The RoMa adaptation uses the original SGRAF patch-level matcher with 200 DGCNN
+point-cloud patches per scene. It supports `scenedepict`, `scanrefer`, `nr3d`,
+and `3dllm`, with Bi-GRU or local BERT text encoders.
+
+```bash
+export BERT_PATH=/home/ktj/Projects/RoMa/pretrained/bert-base-uncased
+bash scripts/preflight_roma.sh
+GPU_ID=0 bash scripts/train_roma.sh scanrefer bigru
+GPU_ID=1 bash scripts/train_roma.sh scanrefer bert
+GPU_ID=0 bash scripts/run_roma_matrix.sh
+```
+
+Checkpoints are written to `runs/roma/<dataset>/<encoder>/checkpoint/`. The
+best checkpoint is selected by `Rsum` and can be tested directly:
+
+```bash
+GPU_ID=0 bash scripts/eval_roma.sh \
+  runs/roma/scanrefer/bigru/checkpoint/scanrefer_SGR_model_best_0.2_0.05_log_0.2.pth.tar \
+  scanrefer bigru
+```
+
+Evaluation reports text-to-scene `R@1`, `R@5`, `R@10`, `R@30`, `Rsum`,
+`MedR`, `MeanR`, and `MRR`.
+
 <!-- ## Reference
 
 If RCL is useful for your research, please cite the following paper:
@@ -103,5 +129,4 @@ If RCL is useful for your research, please cite the following paper:
 
 [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).  
 If any problems, please contact me at (penghu.ml@gmail.com)
-
 

@@ -67,6 +67,8 @@ def main():
         print(opt.model_name)
 
         adjust_learning_rate(opt, model.optimizer, epoch)
+        if hasattr(train_loader.batch_sampler, 'set_epoch'):
+            train_loader.batch_sampler.set_epoch(epoch)
 
         # train for one epoch
         train(opt, train_loader, model, epoch, val_loader)
@@ -144,8 +146,11 @@ def validate(opt, val_loader, model):
     if is_roma_dataset(opt.data_name):
         scene_rows = [val_loader.dataset.scene_indices.index(scene) for scene in dict.fromkeys(val_loader.dataset.scene_indices)]
         sims = shard_attn_scores(model, img_embs[scene_rows], cap_embs, cap_lens, opt, shard_size=100)
-        metrics = text_to_scene_metrics(sims, val_loader.dataset.scene_indices)
+        metrics = text_to_scene_metrics(sims.T, val_loader.dataset.scene_indices)
         logging.info('Text to scene: %s', metrics)
+        for name, value in metrics.items():
+            if isinstance(value, (int, float)):
+                tb_logger.log_value('roma/' + name, value, step=model.Eiters)
         return metrics['Rsum']
     img_div = 1 if 'cc152k' in opt.data_name else 5 #int(val_loader.dataset.im_div)
     # clear duplicate 5*images and keep 1*images
