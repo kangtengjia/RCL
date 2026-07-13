@@ -30,6 +30,12 @@ def parse_opt():
                         help='Number of epochs to update the learning rate.')
     parser.add_argument('--learning_rate', default=.0005, type=float,
                         help='Initial learning rate.')
+    parser.add_argument('--bert_learning_rate', default=3e-5, type=float,
+                        help='Initial learning rate for the pretrained BERT backbone.')
+    parser.add_argument('--bert_warmup_epochs', default=2, type=int,
+                        help='Linear warmup duration for the pretrained BERT backbone.')
+    parser.add_argument('--weight_decay', default=1e-4, type=float,
+                        help='AdamW weight decay for BERT training.')
     parser.add_argument('--workers', default=5, type=int,
                         help='Number of data loader workers.')
     parser.add_argument('--log_step', default=50, type=int,

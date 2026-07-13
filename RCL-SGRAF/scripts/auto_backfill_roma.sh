@@ -15,6 +15,11 @@ PYTHON_BIN="${PYTHON_BIN:-/home/ktj/miniconda3/envs/crossmodal/bin/python}"
 DATA_ROOT="${DATA_ROOT:-${PROJECT_ROOT}/RoMa/data}"
 VOCAB_PATH="${VOCAB_PATH:-${PROJECT_ROOT}/RoMa/vocab}"
 BERT_PATH="${BERT_PATH:-/mnt/newdisk/ktj/pretrained/bert-base-uncased}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-runs/roma}"
+NUM_EPOCHS="${NUM_EPOCHS:-}"
+RCL_LEARNING_RATE="${RCL_LEARNING_RATE:-0.0005}"
+RCL_BERT_LEARNING_RATE="${RCL_BERT_LEARNING_RATE:-3e-5}"
+ESA_LEARNING_RATE="${ESA_LEARNING_RATE:-0.0003}"
 
 mkdir -p "${LOG_DIR}" "${STATE_DIR}"
 SCHEDULER_LOG="${LOG_DIR}/rcl_sgraf_backfill_scheduler${LOG_SUFFIX}.log"
@@ -58,10 +63,15 @@ start_job() {
     local log_file="${LOG_DIR}/${log_prefix}_${dataset}_${text_encoder}${LOG_SUFFIX}.log"
     local running_file="${STATE_DIR}/${job}.running"
     local exit_file="${STATE_DIR}/${job}.exit"
-    local command
+    local command method_environment
 
     printf 'gpu=%s\nsession=%s\nlog=%s\nstarted_at=%(%F %T %z)T\n' "${gpu}" "${session}" "${log_file}" -1 > "${running_file}"
-    command="cd '${method_root}'; DATA_ROOT='${DATA_ROOT}' VOCAB_PATH='${VOCAB_PATH}' BERT_PATH='${BERT_PATH}' PYTHON_BIN='${PYTHON_BIN}' WORKERS=4 GPU_ID='${gpu}' DATASETS='${dataset}' TEXT_ENCODERS='${text_encoder}' bash scripts/run_roma_matrix.sh > '${log_file}' 2>&1; rc=\$?; printf '%s\\n' \"\$rc\" > '${exit_file}'; exit \"\$rc\""
+    if [[ "${method}" == rcl-sgraf ]]; then
+        method_environment="LEARNING_RATE='${RCL_LEARNING_RATE}' BERT_LEARNING_RATE='${RCL_BERT_LEARNING_RATE}'"
+    else
+        method_environment="LEARNING_RATE='${ESA_LEARNING_RATE}'"
+    fi
+    command="cd '${method_root}'; DATA_ROOT='${DATA_ROOT}' VOCAB_PATH='${VOCAB_PATH}' BERT_PATH='${BERT_PATH}' PYTHON_BIN='${PYTHON_BIN}' WORKERS=4 GPU_ID='${gpu}' OUTPUT_ROOT='${OUTPUT_ROOT}' NUM_EPOCHS='${NUM_EPOCHS}' ${method_environment} DATASETS='${dataset}' TEXT_ENCODERS='${text_encoder}' bash scripts/run_roma_matrix.sh > '${log_file}' 2>&1; rc=\$?; printf '%s\\n' \"\$rc\" > '${exit_file}'; exit \"\$rc\""
     if ! tmux new-session -d -s "${session}" "${command}"; then
         rm -f "${running_file}"
         return 1
@@ -69,7 +79,9 @@ start_job() {
     log "started ${method} ${dataset}/${text_encoder} on GPU ${gpu} (session ${session})"
 }
 
-if [[ "${RECOVERY_ONLY:-0}" == "1" ]]; then
+if [[ -n "${JOB_SPECS:-}" ]]; then
+    IFS=';' read -r -a JOBS <<<"${JOB_SPECS}"
+elif [[ "${RECOVERY_ONLY:-0}" == "1" ]]; then
     declare -a JOBS=(
         "rcl-sgraf scanrefer bert"
         "rcl-sgraf nr3d bigru"

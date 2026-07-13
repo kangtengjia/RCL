@@ -216,8 +216,11 @@ def adjust_learning_rate(opt, optimizer, epoch):
     Sets the learning rate to the initial LR
     decayed by 10 after opt.lr_update epoch
     """
-    lr = opt.learning_rate * (0.1 ** (epoch // opt.lr_update))
     for param_group in optimizer.param_groups:
+        base_lr = param_group.get('initial_lr', opt.learning_rate)
+        lr = base_lr * (0.1 ** (epoch // opt.lr_update))
+        if param_group.get('group_name') == 'bert' and opt.bert_warmup_epochs > 0:
+            lr *= min(1.0, float(epoch + 1) / opt.bert_warmup_epochs)
         param_group['lr'] = lr
 
 

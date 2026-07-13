@@ -541,7 +541,31 @@ class SGRAF(object):
         params += list(self.sim_enc.parameters())
         self.params = params
 
-        self.optimizer = torch.optim.Adam(params, lr=opt.learning_rate)
+        if opt.text_enc_type == 'bert':
+            bert_params = list(self.txt_enc.bert.parameters())
+            bert_param_ids = {id(parameter) for parameter in bert_params}
+            task_params = [parameter for parameter in self.txt_enc.parameters()
+                           if id(parameter) not in bert_param_ids]
+            task_params += list(self.img_enc.parameters())
+            task_params += list(self.sim_enc.parameters())
+            self.optimizer = torch.optim.AdamW([
+                {
+                    'params': bert_params,
+                    'lr': opt.bert_learning_rate,
+                    'initial_lr': opt.bert_learning_rate,
+                    'group_name': 'bert',
+                    'weight_decay': opt.weight_decay,
+                },
+                {
+                    'params': task_params,
+                    'lr': opt.learning_rate,
+                    'initial_lr': opt.learning_rate,
+                    'group_name': 'task',
+                    'weight_decay': opt.weight_decay,
+                },
+            ])
+        else:
+            self.optimizer = torch.optim.Adam(params, lr=opt.learning_rate)
         self.Eiters = 0
 
     def state_dict(self):
