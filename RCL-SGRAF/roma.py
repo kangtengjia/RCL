@@ -164,6 +164,8 @@ class SceneUniqueBatchSampler(Sampler[List[int]]):
             grouped[scene_index].append(index)
         active = list(grouped)
         while active:
+            if len(active) < 2:
+                break
             if self.shuffle:
                 rng.shuffle(active)
             selected = active[: self.batch_size]
