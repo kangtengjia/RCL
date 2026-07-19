@@ -7,6 +7,7 @@ import copy
 import json
 import logging
 import os
+from pathlib import Path
 
 import torch
 from transformers import BertTokenizer
@@ -28,6 +29,7 @@ def parse_args():
     parser.add_argument("--bert_path", default="", help="Local bert-base-uncased directory.")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--output_json", help="Optional path for structured retrieval metrics.")
     return parser.parse_args()
 
 
@@ -83,10 +85,20 @@ def evaluate(options, checkpoint):
 def main():
     arguments = parse_args()
     logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
-    checkpoint = torch.load(arguments.checkpoint, map_location="cpu")
+    checkpoint = torch.load(arguments.checkpoint, map_location="cpu", weights_only=False)
     options = configure_roma_options(checkpoint["opt"], arguments)
     metrics = evaluate(options, checkpoint)
-    print(json.dumps(metrics, sort_keys=True))
+    result = {
+        "dataset": arguments.data_name,
+        "text_encoder": arguments.text_enc_type,
+        "checkpoint": str(Path(arguments.checkpoint).resolve()),
+        "metrics": metrics,
+    }
+    if arguments.output_json:
+        target = Path(arguments.output_json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":

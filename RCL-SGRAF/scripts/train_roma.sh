@@ -7,4 +7,18 @@ if [[ "${TEXT_ENCODER}" == bert ]]; then
   DEFAULT_EPOCHS=15
   EXTRA+=(--bert_path "${BERT_PATH}" --bert_learning_rate "${BERT_LEARNING_RATE:-3e-5}" --bert_warmup_epochs "${BERT_WARMUP_EPOCHS:-2}" --weight_decay "${WEIGHT_DECAY:-1e-4}")
 fi
-CUDA_VISIBLE_DEVICES="${GPU_ID}" "${PYTHON_BIN}" train.py --data_name "${DATASET}" --data_path "${DATA_ROOT}" --data_root "${DATA_ROOT}" --vocab_path "${VOCAB_PATH}" --text_enc_type "${TEXT_ENCODER}" --img_dim 1024 --num_regions 200 --embed_size 1024 --num_epochs "${NUM_EPOCHS:-${DEFAULT_EPOCHS}}" --batch_size "${BATCH_SIZE:-8}" --workers "${WORKERS:-4}" --model_name "${OUTPUT_ROOT}/${DATASET}/${TEXT_ENCODER}/checkpoint" --logger_name "${OUTPUT_ROOT}/${DATASET}/${TEXT_ENCODER}/log" "${EXTRA[@]}"
+MODEL_DIR="${OUTPUT_ROOT}/${DATASET}/${TEXT_ENCODER}/checkpoint"
+if [[ "${AUTO_RESUME:-0}" == "1" ]]; then
+  while IFS= read -r checkpoint; do
+    if "${PYTHON_BIN}" - "${checkpoint}" >/dev/null 2>&1 <<'PY'
+import sys
+import torch
+torch.load(sys.argv[1], map_location="cpu", weights_only=False)
+PY
+    then
+      EXTRA+=(--resume "${checkpoint}")
+      break
+    fi
+  done < <(find "${MODEL_DIR}" -maxdepth 1 -type f -name '*.pth.tar' -size +0c -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2-)
+fi
+CUDA_VISIBLE_DEVICES="${GPU_ID}" "${PYTHON_BIN}" train.py --data_name "${DATASET}" --data_path "${DATA_ROOT}" --data_root "${DATA_ROOT}" --vocab_path "${VOCAB_PATH}" --text_enc_type "${TEXT_ENCODER}" --img_dim 1024 --num_regions 200 --embed_size 1024 --num_epochs "${NUM_EPOCHS:-${DEFAULT_EPOCHS}}" --batch_size "${BATCH_SIZE:-8}" --workers "${WORKERS:-4}" --model_name "${MODEL_DIR}" --logger_name "${OUTPUT_ROOT}/${DATASET}/${TEXT_ENCODER}/log" "${EXTRA[@]}"

@@ -55,7 +55,7 @@ def main():
     start_epoch = 0
     if len(opt.resume) > 0:
         # model_path = opt.best_model_filename
-        checkpoint = torch.load(opt.resume)
+        checkpoint = torch.load(opt.resume, weights_only=False)
         opt = checkpoint['opt']
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['model'])
