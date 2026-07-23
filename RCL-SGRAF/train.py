@@ -62,6 +62,7 @@ def main():
         opt.best_model_filename = ('%s_%s_model_best_%g_%g.pth.tar' % (opt.data_name, opt.module_name, opt.noise_rate, opt.margin))
         print(opt)
     # r_sum = validate(opt, val_loader, model)
+    epochs_without_improvement = 0
     for epoch in range(start_epoch, opt.num_epochs):
         print(opt.logger_name)
         print(opt.model_name)
@@ -78,6 +79,10 @@ def main():
 
         # remember best R@ sum and save checkpoint
         is_best = r_sum > best_rsum
+        if is_best:
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
         best_rsum = max(r_sum, best_rsum)
 
         if not os.path.exists(opt.model_name):
@@ -90,6 +95,12 @@ def main():
             'Eiters': model.Eiters,
         # }, is_best, filename='{}_{}_checkpoint_{}_{}_{}.pth.tar'.format(opt.data_name, opt.module_name, opt.noise_rate, opt.margin, epoch), prefix=opt.model_name + '/')
         }, is_best, filename='{}_{}_checkpoint_{}_{}_{}.pth.tar'.format(opt.data_name, opt.module_name, opt.noise_rate, opt.loss, epoch), prefix=opt.model_name + '/')
+
+        if opt.early_stop_patience > 0 and epochs_without_improvement >= opt.early_stop_patience:
+            logging.info(
+                'Early stopping at epoch %d: validation Rsum did not improve for %d epochs.',
+                epoch + 1, opt.early_stop_patience)
+            break
 
 
 def train(opt, train_loader, model, epoch, val_loader):

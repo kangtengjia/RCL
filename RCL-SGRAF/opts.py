@@ -26,6 +26,8 @@ def parse_opt():
                         help='Size of a training mini-batch.')
     parser.add_argument('--num_epochs', default=40, type=int,
                         help='Number of training epochs.')
+    parser.add_argument('--early_stop_patience', default=0, type=int,
+                        help='Stop after this many consecutive validation epochs without Rsum improvement; 0 disables early stopping.')
     parser.add_argument('--lr_update', default=30, type=int,
                         help='Number of epochs to update the learning rate.')
     parser.add_argument('--learning_rate', default=.0005, type=float,

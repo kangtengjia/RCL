@@ -43,7 +43,10 @@ def is_roma_dataset(data_name: str) -> bool:
 
 
 def _split_tag(data_split: str) -> str:
-    return "train" if str(data_split).lower() == "train" else "val"
+    split = str(data_split).lower()
+    if split not in {"train", "val", "test"}:
+        raise ValueError(f"unsupported RoMa split: {data_split}")
+    return split
 
 
 def _json(path: Path) -> List[Dict[str, object]]:
@@ -82,9 +85,9 @@ def _rows(root: Path, dataset: str, split: str) -> tuple[List[str], List[str]]:
     raise ValueError(f"unsupported RoMa dataset: {dataset}")
 
 
-def _scanrefer_pool(root: Path) -> tuple[List[str], np.ndarray]:
+def _scanrefer_pool(root: Path, splits: Sequence[str]) -> tuple[List[str], np.ndarray]:
     scene_ids, arrays = [], []
-    for split in ("train", "val"):
+    for split in splits:
         _, rows_scene_ids = _rows(root, "scanrefer", split)
         order = _ordered_unique(rows_scene_ids)
         array = np.load(root / f"pt2vec_200_random_{split}.npy")
@@ -97,9 +100,9 @@ def _scanrefer_pool(root: Path) -> tuple[List[str], np.ndarray]:
     return scene_ids, np.concatenate(arrays, axis=0)
 
 
-def _scenedepict_pool(root: Path) -> tuple[List[str], np.ndarray]:
+def _scenedepict_pool(root: Path, splits: Sequence[str]) -> tuple[List[str], np.ndarray]:
     scene_ids, arrays = [], []
-    for split in ("train", "val"):
+    for split in splits:
         _, rows_scene_ids = _rows(root, "scenedepict", split)
         order = _ordered_unique(rows_scene_ids)
         array = np.load(root / f"3D_Text_Retrv_grid_{split}.npy")
@@ -119,8 +122,9 @@ def load_roma_bundle(data_root: str | Path, data_name: str, data_split: str) -> 
     captions, scene_ids = _rows(root, dataset, split)
     feature_scene_ids = _ordered_unique(scene_ids)
     if dataset == "nr3d":
-        scan_ids, scan_features = _scanrefer_pool(root)
-        depict_ids, depict_features = _scenedepict_pool(root)
+        pool_splits = ("test",) if split == "test" else ("train", "val")
+        scan_ids, scan_features = _scanrefer_pool(root, pool_splits)
+        depict_ids, depict_features = _scenedepict_pool(root, pool_splits)
         features_by_scene = dict(zip(scan_ids, scan_features))
         features_by_scene.update({scene_id: feature for scene_id, feature in zip(depict_ids, depict_features) if scene_id not in features_by_scene})
         missing = sorted(set(feature_scene_ids) - set(features_by_scene))
