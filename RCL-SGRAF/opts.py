@@ -27,11 +27,17 @@ def parse_opt():
     parser.add_argument('--num_epochs', default=40, type=int,
                         help='Number of training epochs.')
     parser.add_argument('--early_stop_patience', default=0, type=int,
-                        help='Stop after this many consecutive validation epochs without Rsum improvement; 0 disables early stopping.')
+                        help='Stop after this many consecutive validation epochs without R@1 improvement; 0 disables early stopping.')
     parser.add_argument('--lr_update', default=30, type=int,
                         help='Number of epochs to update the learning rate.')
     parser.add_argument('--learning_rate', default=.0005, type=float,
                         help='Initial learning rate.')
+    parser.add_argument('--lr_schedule', choices=['step', 'cosine_restart'], default='step',
+                        help='Learning-rate schedule. cosine_restart cycles from each group initial_lr to lr_min.')
+    parser.add_argument('--lr_min', default=0.0, type=float,
+                        help='Minimum learning rate for --lr_schedule cosine_restart.')
+    parser.add_argument('--lr_cycle_epochs', default=100, type=int,
+                        help='Epochs in one cosine-restart learning-rate cycle.')
     parser.add_argument('--bert_learning_rate', default=3e-5, type=float,
                         help='Initial learning rate for the pretrained BERT backbone.')
     parser.add_argument('--bert_warmup_epochs', default=2, type=int,
@@ -86,6 +92,9 @@ def parse_opt():
                         help='Step of the SGR.')
     parser.add_argument('--resume', default='',
                         help='Train from checkpoint.')
+    parser.add_argument('--resume_reset_epoch', action='store_true',
+                        help=('Load model weights from --resume but restart the epoch/LR '
+                              'schedule for lower-LR continuation training.'))
     opt = parser.parse_args()
 
     if opt.module_name == 'SGRAF':

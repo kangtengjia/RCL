@@ -22,6 +22,7 @@ from model import SGRAF
 from evaluation import i2t, t2i, AverageMeter, LogCollector, encode_data, shard_attn_scores
 
 import logging
+import math
 from roma import is_roma_dataset
 from roma_evaluation import text_to_scene_metrics
 import tensorboard_logger as tb_logger
@@ -51,16 +52,21 @@ def main():
     model = SGRAF(opt)
 
     # Train the Model
-    best_rsum = 0
+    best_r1 = 0
     start_epoch = 0
     if len(opt.resume) > 0:
-        # model_path = opt.best_model_filename
         checkpoint = torch.load(opt.resume, weights_only=False)
-        opt = checkpoint['opt']
-        start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['model'])
-        opt.best_model_filename = ('%s_%s_model_best_%g_%g.pth.tar' % (opt.data_name, opt.module_name, opt.noise_rate, opt.margin))
-        print(opt)
+        # Preserve command-line options. Historical checkpoints embed the
+        # original ``opt`` object, which otherwise discards a requested lower
+        # learning rate and the new output directory.
+        if opt.resume_reset_epoch:
+            start_epoch = 0
+        else:
+            start_epoch = checkpoint['epoch']
+            best_r1 = checkpoint.get('best_r1', 0)
+        logging.info('Loaded %s; start_epoch=%d, best_R@1=%g, learning_rate=%g',
+                     opt.resume, start_epoch, best_r1, opt.learning_rate)
     # r_sum = validate(opt, val_loader, model)
     epochs_without_improvement = 0
     for epoch in range(start_epoch, opt.num_epochs):
@@ -75,22 +81,23 @@ def main():
         train(opt, train_loader, model, epoch, val_loader)
 
         # evaluate on validation set
-        r_sum = validate(opt, val_loader, model)
+        r1 = validate(opt, val_loader, model)
 
-        # remember best R@ sum and save checkpoint
-        is_best = r_sum > best_rsum
+        # Select checkpoints and early-stop solely by text-to-scene R@1.
+        is_best = r1 > best_r1
         if is_best:
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
-        best_rsum = max(r_sum, best_rsum)
+        best_r1 = max(r1, best_r1)
 
         if not os.path.exists(opt.model_name):
             os.mkdir(opt.model_name)
         save_checkpoint({
             'epoch': epoch + 1,
             'model': model.state_dict(),
-            'best_rsum': best_rsum,
+            'best_r1': best_r1,
+            'selection_metric': 'R@1',
             'opt': opt,
             'Eiters': model.Eiters,
         # }, is_best, filename='{}_{}_checkpoint_{}_{}_{}.pth.tar'.format(opt.data_name, opt.module_name, opt.noise_rate, opt.margin, epoch), prefix=opt.model_name + '/')
@@ -98,7 +105,7 @@ def main():
 
         if opt.early_stop_patience > 0 and epochs_without_improvement >= opt.early_stop_patience:
             logging.info(
-                'Early stopping at epoch %d: validation Rsum did not improve for %d epochs.',
+                'Early stopping at epoch %d: validation R@1 did not improve for %d epochs.',
                 epoch + 1, opt.early_stop_patience)
             break
 
@@ -162,7 +169,7 @@ def validate(opt, val_loader, model):
         for name, value in metrics.items():
             if isinstance(value, (int, float)):
                 tb_logger.log_value('roma/' + name, value, step=model.Eiters)
-        return metrics['Rsum']
+        return metrics['R@1']
     img_div = 1 if 'cc152k' in opt.data_name else 5 #int(val_loader.dataset.im_div)
     # clear duplicate 5*images and keep 1*images
     img_embs = numpy.array([img_embs[i] for i in range(0, len(img_embs), img_div)])
@@ -223,10 +230,19 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', prefix=''):
 
 
 def adjust_learning_rate(opt, optimizer, epoch):
-    """
-    Sets the learning rate to the initial LR
-    decayed by 10 after opt.lr_update epoch
-    """
+    """Update each optimizer group without changing its configured base LR."""
+    if opt.lr_schedule == 'cosine_restart':
+        if opt.lr_cycle_epochs < 2:
+            raise ValueError('--lr_cycle_epochs must be at least 2 for cosine_restart')
+        cycle_epoch = epoch % opt.lr_cycle_epochs
+        phase = cycle_epoch / float(opt.lr_cycle_epochs - 1)
+        cosine = 0.5 * (1.0 + math.cos(math.pi * phase))
+        for param_group in optimizer.param_groups:
+            base_lr = param_group.get('initial_lr', opt.learning_rate)
+            lr = opt.lr_min + (base_lr - opt.lr_min) * cosine
+            param_group['lr'] = lr
+        return
+
     for param_group in optimizer.param_groups:
         base_lr = param_group.get('initial_lr', opt.learning_rate)
         lr = base_lr * (0.1 ** (epoch // opt.lr_update))

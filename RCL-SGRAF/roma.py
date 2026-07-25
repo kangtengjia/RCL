@@ -44,6 +44,10 @@ def is_roma_dataset(data_name: str) -> bool:
 
 def _split_tag(data_split: str) -> str:
     split = str(data_split).lower()
+    # Native SGRAF calls its development split ``dev``.  Scene-disjoint RoMa
+    # partitions use the explicit, standard name ``val``.
+    if split == "dev":
+        split = "val"
     if split not in {"train", "val", "test"}:
         raise ValueError(f"unsupported RoMa split: {data_split}")
     return split
