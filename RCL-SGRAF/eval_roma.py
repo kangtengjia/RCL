@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument("--data_root", required=True, help="RoMa data directory.")
     parser.add_argument("--vocab_path", required=True, help="RoMa vocabulary directory.")
     parser.add_argument("--text_enc_type", required=True, choices=("bigru", "bert"))
+    parser.add_argument("--split", choices=("val", "test"), default="val",
+                        help="RoMa split to evaluate; use test only after validation-based selection is frozen.")
     parser.add_argument("--bert_path", default="", help="Local bert-base-uncased directory.")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--workers", type=int, default=4)
@@ -63,11 +65,11 @@ def load_vocabulary(options):
     return vocabulary
 
 
-def evaluate(options, checkpoint):
+def evaluate(options, checkpoint, split: str):
     vocabulary = load_vocabulary(options)
     model = SGRAF(options)
     model.load_state_dict(checkpoint["model"])
-    loader = get_test_loader("dev", options.data_name, vocabulary, options.batch_size, options.workers, options)
+    loader = get_test_loader(split, options.data_name, vocabulary, options.batch_size, options.workers, options)
 
     image_embeddings, caption_embeddings, caption_lengths = encode_data(model, loader, logging.info)
     scene_rows = [loader.dataset.scene_indices.index(scene) for scene in dict.fromkeys(loader.dataset.scene_indices)]
@@ -87,10 +89,11 @@ def main():
     logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
     checkpoint = torch.load(arguments.checkpoint, map_location="cpu", weights_only=False)
     options = configure_roma_options(checkpoint["opt"], arguments)
-    metrics = evaluate(options, checkpoint)
+    metrics = evaluate(options, checkpoint, arguments.split)
     result = {
         "dataset": arguments.data_name,
         "text_encoder": arguments.text_enc_type,
+        "split": arguments.split,
         "checkpoint": str(Path(arguments.checkpoint).resolve()),
         "metrics": metrics,
     }
